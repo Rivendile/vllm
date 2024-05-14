@@ -414,6 +414,7 @@ class Scheduler:
         # such as self.running, self.swapped, and self.waiting.
         scheduler_outputs = self._schedule()
         now = time.time()
+        # print("scheduler config: ", self.scheduler_config.max_num_batched_tokens)
 
         # Create input data structures.
         seq_group_metadata_list: List[SequenceGroupMetadata] = []
