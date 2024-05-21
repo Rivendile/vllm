@@ -373,6 +373,8 @@ class SequenceGroup:
         arrival_time: float,
         lora_request: Optional[LoRARequest] = None,
         multi_modal_data: Optional[MultiModalData] = None,
+        priority: Optional[float] = None, 
+        last_priority: Optional[float] = None, 
     ) -> None:
         self.request_id = request_id
         self.seqs_dict = {seq.seq_id: seq for seq in seqs}
@@ -386,6 +388,8 @@ class SequenceGroup:
         self.prompt_logprobs: Optional[PromptLogprobs] = None
         self.state = SequenceGroupState()
         self.multi_modal_data = multi_modal_data
+        self.priority = self.get_estimated_latency()
+        self.last_priority = self.priority
 
     @property
     def prompt(self) -> str:
@@ -402,6 +406,23 @@ class SequenceGroup:
     @property
     def lora_int_id(self) -> int:
         return self.lora_request.lora_int_id if self.lora_request else 0
+    
+    # only for emlfq
+    def get_estimated_latency(self) -> float:
+        est_latency = 0
+        req = requests[self.request_id]
+        workload_info = workloads_dict[req.workload_type]
+        est_latency = workload_info["cur_t_in"]+workload_info["cur_t_out"]*workload_info["st_len_out"]
+        return est_latency
+        
+    # only for emlfq
+    def get_next_token_latency(self) -> float:
+        req = requests[self.request_id]
+        workload_info = workloads_dict[req.workload_type]
+        if len(self.seqs)==0:
+            return workload_info["cur_t_in"]
+        else:
+            return workload_info["cur_t_out"]
 
     def get_last_latency(self, now: float) -> float:
         """Gets last token latency for Request level timings."""

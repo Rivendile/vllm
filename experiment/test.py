@@ -18,8 +18,8 @@ def generate_workloads(prompts, prompt_ids):
     # print(len(prompts[0]), len(prompts[21]))
     if prompt_ids == [0,21]:
         #todo: tp need to profile
-        info0 = {"tp_t_in": 0.0495, "tp_t_out": 0.0136, "st_len_out": 539, "t_in": 0.0495, "t_out":0.0136, "prompt": prompts[0]}
-        info1 = {"tp_t_in": 0.0188, "tp_t_out": 0.0129, "st_len_out": 22, "t_in": 0.0188, "t_out":0.0129, "prompt": prompts[21]}
+        info0 = {"tp_t_in": 0.10, "tp_t_out": 0.0118, "st_len_out": 539, "t_in": 0.0495, "t_out":0.0136, "prompt": prompts[0], "cur_t_in": 0.10, "cur_t_out": 0.0118}
+        info1 = {"tp_t_in": 0.04, "tp_t_out": 0.012, "st_len_out": 22, "t_in": 0.0188, "t_out":0.013, "prompt": prompts[21], "cur_t_in": 0.04, "cur_t_out": 0.012, }
         workload0 = Workload("job0", info0)
         workload1 = Workload("job1", info1)
         workloads_dict = {"job0":workload0, "job1":workload1}
@@ -93,7 +93,7 @@ def warmup_process_requests(engine: LLMEngine,
     output_len = [0]*len(test_prompts)
     output2_len = [0]*len(test_prompts)
     while test_prompts or engine.has_unfinished_requests():
-        # time0 = time.perf_counter()
+        time0 = time.perf_counter()
         if test_prompts:
             prompt = test_prompts.pop(0)
             input_len.append(len(prompt))
@@ -108,7 +108,7 @@ def warmup_process_requests(engine: LLMEngine,
                 time_list.append(request_output.metrics.finished_time-request_output.metrics.arrival_time)
                 output_len[int(request_output.request_id)] = len(request_output.prompt_token_ids)
                 output2_len[int(request_output.request_id)] = len(request_output.prompt)
-        # time1 = time.perf_counter()
+        time1 = time.perf_counter()
         # print(time1-time0)
 
         iter_count += 1
@@ -121,7 +121,7 @@ def warmup_process_requests(engine: LLMEngine,
     import csv
     with open("test.csv", "w") as file:
         writer = csv.writer(file)
-        for aa, bb, cc in zip(input_len, output_len):
+        for aa, bb, cc in zip(input_len, output_len, output2_len):
             writer.writerow([aa,bb,cc])
 
     return sum(time_list)/len(time_list)
@@ -171,7 +171,7 @@ def process_requests(engine: LLMEngine,
                 output_len.append([len(request_output.prompt), requests[finished_rid].workload_type])
                 requests[finished_rid].finish_time = request_output.metrics.finished_time-zero_time
                 requests[finished_rid].latency = requests[finished_rid].finish_time-requests[finished_rid].arrival_time
-                print(request_output.request_id, len(request_output.prompt_token_ids))
+                # print(request_output.request_id, len(request_output.prompt_token_ids))
         # time1 = time.perf_counter()
         # print(time1-time0)
 
@@ -203,8 +203,8 @@ if __name__ == '__main__':
     engine = initialize_engine(args)
 
     print("warming up...")
-    tmp_prompts = create_test_prompts()
-    warmup_process_requests(engine, tmp_prompts)
+    # tmp_prompts = create_test_prompts()
+    # warmup_process_requests(engine, tmp_prompts)
     print("warming up done.")
     one_time = -1
     # exit()
@@ -218,5 +218,6 @@ if __name__ == '__main__':
 
     zero_time = init_time()
     process_requests(engine, requests[:10], workloads_dict)
+    # warmup_process_requests(engine, [test_prompts[1], test_prompts[1]])
 
     # todo: output len from len(prompt) to len(tokens)

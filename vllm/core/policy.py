@@ -57,7 +57,8 @@ class EMLFQ(Policy):
         now: float,
         seq_group: SequenceGroup,
     ) -> float:
-        pass
+        return seq_group.priority
+        
 
 class PolicyFactory:
 

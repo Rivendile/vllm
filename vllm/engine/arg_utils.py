@@ -63,6 +63,7 @@ class EngineArgs:
     image_feature_size: Optional[int] = None
     scheduler_delay_factor: float = 0.0
     enable_chunked_prefill: bool = False
+    scheduler_policy: str = "fcfs"
 
     def __post_init__(self):
         if self.tokenizer is None:
@@ -358,6 +359,11 @@ class EngineArgs:
             help='Apply a delay (of delay factor multiplied by previous'
             'prompt latency) before scheduling next prompt.')
         parser.add_argument(
+            '--scheduler-policy',
+            type=str,
+            default=EngineArgs.scheduler_policy,
+            help='Scheduler policy, select from fcfs, interleave, sjmlfq, and emlfq')
+        parser.add_argument(
             '--enable-chunked-prefill',
             type=bool,
             default=False,
@@ -408,6 +414,7 @@ class EngineArgs:
             self.use_v2_block_manager,
             delay_factor=self.scheduler_delay_factor,
             enable_chunked_prefill=self.enable_chunked_prefill,
+            policy=self.scheduler_policy,
         )
         lora_config = LoRAConfig(
             max_lora_rank=self.max_lora_rank,

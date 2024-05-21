@@ -545,6 +545,7 @@ class SchedulerConfig:
         use_v2_block_manager: bool = False,
         delay_factor: float = 0.0,
         enable_chunked_prefill: bool = False,
+        policy: str = "fcfs", 
     ) -> None:
         if max_num_batched_tokens is not None:
             self.max_num_batched_tokens = max_num_batched_tokens
@@ -557,6 +558,7 @@ class SchedulerConfig:
         self.delay_factor = delay_factor
         self.use_v2_block_manager = use_v2_block_manager
         self.chunked_prefill_enabled = enable_chunked_prefill
+        self.policy = policy
         self._verify_args()
 
     def _verify_args(self) -> None:
@@ -573,6 +575,9 @@ class SchedulerConfig:
                 f"max_num_batched_tokens ({self.max_num_batched_tokens}) must "
                 "be greater than or equal to max_num_seqs "
                 f"({self.max_num_seqs}).")
+        if self.policy not in ["fcfs", "interleave", "sjmlfq", "emlfq"]:
+            raise ValueError(
+                f"policy ({self.policy}) must be in fcfs, interleave, sjmlfq, or emlfq.")
 
 
 class DeviceConfig:
