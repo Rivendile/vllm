@@ -1,5 +1,5 @@
 import time
-from typing import Iterable, List, Optional, Tuple, Type, Union
+from typing import Iterable, List, Optional, Tuple, Type, Union, Dict
 
 from transformers import PreTrainedTokenizer
 
@@ -253,6 +253,7 @@ class LLMEngine:
         arrival_time: Optional[float] = None,
         lora_request: Optional[LoRARequest] = None,
         multi_modal_data: Optional[MultiModalData] = None,
+        workload_info: Optional[Dict] = None, 
     ) -> None:
         """Add a request to the engine's request pool.
 
@@ -270,6 +271,7 @@ class LLMEngine:
             arrival_time: The arrival time of the request. If None, we use
                 the current monotonic time.
             multi_modal_data: Multi modal data per request.
+            workload_info: profiled workload infomation for emlfq.
 
         Details:
             - Set arrival_time to the current time if it is None.
@@ -329,11 +331,14 @@ class LLMEngine:
         sampling_params.eos_token_id = seq.eos_token_id
 
         # Create the sequence group.
+        # print(self.scheduler_config.policy, workload_info)
         seq_group = SequenceGroup(request_id, [seq], sampling_params,
-                                  arrival_time, lora_request, multi_modal_data)
-        if self.scheduler_config.policy == "emlfq":
-            seq_group.priority = seq_group.get_estimated_latency()
-            seq_group.last_priority = seq_group.priority
+                                  arrival_time, lora_request, multi_modal_data, workload_info=workload_info)
+        seq_group.init_priority(self.scheduler_config.policy)
+        # print(seq_group, seq_group.workload_info)
+        # if self.scheduler_config.policy == "emlfq":
+        #     seq_group.priority = seq_group.get_estimated_latency()
+        #     seq_group.last_priority = seq_group.priority
 
         # Add the sequence group to the scheduler.
         self.scheduler.add_seq_group(seq_group)
@@ -613,9 +618,16 @@ class LLMEngine:
             request_output = RequestOutput.from_seq_group(seq_group)
             request_outputs.append(request_output)
 
+        # Update req priority for emlfq
+        if self.scheduler_config.policy in ["emlfq", "sjmlfq"]:
+            for scheduled_seq_group in scheduled_seq_groups:
+                seq_group = scheduled_seq_group.seq_group
+                seq_group.update_priority(self.scheduler_config.policy, now)
+
         # Log stats.
         if self.log_stats:
             self.stat_logger.log(self._get_stats(scheduler_outputs))
+
         return request_outputs
 
     def step(self) -> List[RequestOutput]:

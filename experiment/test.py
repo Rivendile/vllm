@@ -18,8 +18,8 @@ def generate_workloads(prompts, prompt_ids):
     # print(len(prompts[0]), len(prompts[21]))
     if prompt_ids == [0,21]:
         #todo: tp need to profile
-        info0 = {"tp_t_in": 0.10, "tp_t_out": 0.0118, "st_len_out": 539, "t_in": 0.0495, "t_out":0.0136, "prompt": prompts[0], "cur_t_in": 0.10, "cur_t_out": 0.0118}
-        info1 = {"tp_t_in": 0.04, "tp_t_out": 0.012, "st_len_out": 22, "t_in": 0.0188, "t_out":0.013, "prompt": prompts[21], "cur_t_in": 0.04, "cur_t_out": 0.012, }
+        info0 = {"tp_t_in": 0.10, "tp_t_out": 0.0118, "st_len_out": 539, "t_in": 0.0495, "t_out":0.0136, "prompt": prompts[0], "cur_t_in": 0.0495, "cur_t_out": 0.0136}
+        info1 = {"tp_t_in": 0.04, "tp_t_out": 0.012, "st_len_out": 22, "t_in": 0.0188, "t_out":0.013, "prompt": prompts[21], "cur_t_in": 0.0188, "cur_t_out": 0.013}
         workload0 = Workload("job0", info0)
         workload1 = Workload("job1", info1)
         workloads_dict = {"job0":workload0, "job1":workload1}
@@ -159,7 +159,7 @@ def process_requests(engine: LLMEngine,
         for req in new_reqs:
             workload_info = workloads_dict[req.workload_type].info_args
             prompt = workload_info["prompt"]
-            engine.add_request(str(request_id), prompt, sampling_params) # todo  slo
+            engine.add_request(str(request_id), prompt, sampling_params, workload_info=workload_info) # todo  slo
             request_id += 1
 
         request_outputs: List[RequestOutput] = engine.step()
@@ -171,7 +171,7 @@ def process_requests(engine: LLMEngine,
                 output_len.append([len(request_output.prompt), requests[finished_rid].workload_type])
                 requests[finished_rid].finish_time = request_output.metrics.finished_time-zero_time
                 requests[finished_rid].latency = requests[finished_rid].finish_time-requests[finished_rid].arrival_time
-                # print(request_output.request_id, len(request_output.prompt_token_ids))
+                print(request_output.request_id, len(request_output.prompt_token_ids))
         # time1 = time.perf_counter()
         # print(time1-time0)
 
@@ -213,11 +213,12 @@ if __name__ == '__main__':
     tmp_prompts = create_test_prompts()
     test_prompts, workloads_dict = generate_workloads(tmp_prompts, [0,21])
     requests = generate_requests(workloads_dict)
-    print_requests(requests[:10])
+    # print_requests(requests[:10])
     print("Start process requests!")
 
     zero_time = init_time()
     process_requests(engine, requests[:10], workloads_dict)
     # warmup_process_requests(engine, [test_prompts[1], test_prompts[1]])
+    print_requests(requests[:10])
 
     # todo: output len from len(prompt) to len(tokens)

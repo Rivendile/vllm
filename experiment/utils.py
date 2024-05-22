@@ -4,7 +4,7 @@ import csv
 def print_requests(requests):
     print(f"{len(requests)} in all:")
     for req in requests:
-        print(req.rid, req.workload_type, req.arrival_time, req.slo)
+        print(req.rid, req.workload_type, req.arrival_time, req.slo, req.finish_time, req.latency)
 
 def init_time():
     return time.time()

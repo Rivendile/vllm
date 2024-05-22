@@ -373,8 +373,7 @@ class SequenceGroup:
         arrival_time: float,
         lora_request: Optional[LoRARequest] = None,
         multi_modal_data: Optional[MultiModalData] = None,
-        priority: Optional[float] = None, 
-        last_priority: Optional[float] = None, 
+        workload_info: Optional[Dict] = None,
     ) -> None:
         self.request_id = request_id
         self.seqs_dict = {seq.seq_id: seq for seq in seqs}
@@ -388,8 +387,9 @@ class SequenceGroup:
         self.prompt_logprobs: Optional[PromptLogprobs] = None
         self.state = SequenceGroupState()
         self.multi_modal_data = multi_modal_data
-        self.priority = self.get_estimated_latency()
-        self.last_priority = self.priority
+        self.workload_info = workload_info
+        self.priority = None
+        self.last_priority = None
 
     @property
     def prompt(self) -> str:
@@ -406,26 +406,52 @@ class SequenceGroup:
     @property
     def lora_int_id(self) -> int:
         return self.lora_request.lora_int_id if self.lora_request else 0
+
+    def init_priority(self, policy):
+        if policy=="sjmlfq":
+            first_latency = self.workload_info["cur_t_in"]
+            self.priority = 1
+            while self.priority<first_latency:
+                self.priority *= 2
+            self.last_priority = self.priority
+            self.priority += self.last_priority # add a bias to identify different queues
+        elif policy=="emlfq":
+            self.priority = self.get_estimated_latency()
+            self.last_priority = self.priority
     
     # only for emlfq
     def get_estimated_latency(self) -> float:
         est_latency = 0
-        req = requests[self.request_id]
-        workload_info = workloads_dict[req.workload_type]
-        est_latency = workload_info["cur_t_in"]+workload_info["cur_t_out"]*workload_info["st_len_out"]
+        est_latency = self.workload_info["cur_t_in"]+self.workload_info["cur_t_out"]*self.workload_info["st_len_out"]
         return est_latency
         
     # only for emlfq
-    def get_next_token_latency(self) -> float:
-        req = requests[self.request_id]
-        workload_info = workloads_dict[req.workload_type]
-        if len(self.seqs)==0:
-            return workload_info["cur_t_in"]
-        else:
-            return workload_info["cur_t_out"]
+    # def get_next_token_latency(self) -> float:
+    #     if len(self.seqs)==0:
+    #         return self.workload_info["cur_t_in"]
+    #     else:
+    #         return self.workload_info["cur_t_out"]
+    
+    def update_priority(self, policy, now: float) -> float:
+        if policy =="sjmlfq":
+            last_latency = now - self.metrics.last_token_time
+            if self.priority-last_latency<self.last_priority:
+                self.last_priority *= 2
+                self.priority = self.last_priority * 2
+            else:
+                self.priority -= last_latency
+        elif policy == "emlfq":
+            last_latency = now - self.metrics.last_token_time
+            if self.priority<last_latency:
+                self.priority = self.last_priority*2
+                self.last_priority = self.last_priority*2
+            else:
+                self.priority -= last_latency
+
 
     def get_last_latency(self, now: float) -> float:
         """Gets last token latency for Request level timings."""
+        # print("!!!!get_last_latency!!!!")
         latency = now - self.metrics.last_token_time
         self.metrics.last_token_time = now
         return latency

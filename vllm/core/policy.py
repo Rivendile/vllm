@@ -41,7 +41,7 @@ class SJMLFQ(Policy):
         now: float,
         seq_group: SequenceGroup,
     ) -> float:
-        pass
+        return -seq_group.priority
     
 class INTERLEAVE(Policy):
     def get_priority(
@@ -49,7 +49,7 @@ class INTERLEAVE(Policy):
         now: float,
         seq_group: SequenceGroup,
     ) -> float:
-        pass
+        return -seq_group.metrics.last_token_time
 
 class EMLFQ(Policy):
     def get_priority(
