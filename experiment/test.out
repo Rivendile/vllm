@@ -1,1 +1,4 @@
 rate scale 1e-4, policy fcfs
+rate scale 1e-4, policy interleave
+rate scale 1e-4, policy sjmlfq
+rate scale 1e-4, policy emlfq

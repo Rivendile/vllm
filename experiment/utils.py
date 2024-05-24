@@ -79,6 +79,11 @@ def get_metrics(args, requests, workloads_dict, workload_duration):
     metrics["overall"]["r_tput"] = len(all_latency)/all_duration
     metrics["overall"]["t_tput"] = sum(all_tokens)/all_duration
     metrics["overall"]["slo_attainment"] = len(all_latency)/all_counts if all_counts>0 else 0
+
+    # print(latencys)
+    # print(all_latency)
+    # print(all_norm_latency)
+    # print(norm_latencys)
     
     return metrics
 

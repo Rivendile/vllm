@@ -11,12 +11,12 @@ from utils import print_requests, get_time, init_time, final_time, cmp, get_metr
 path = '/users/zyh/datasets/ShareGPT52K/sg_90k_part1.json'
 max_length = 2048
 max_test_num = 500
-sampling_params = SamplingParams(max_tokens=256)
+sampling_params = SamplingParams(max_tokens=512)
 
 
 def generate_workloads(prompts, prompt_ids):
     # print(len(prompts[0]), len(prompts[21]))
-    if prompt_ids == [0,21]:
+    if prompt_ids == [11, 66]:
         #todo: tp need to profile
         info0 = {"tp_t_in": 0.10, "tp_t_out": 0.0118, "st_len_out": 539, "t_in": 0.0495, "t_out":0.0136, "prompt": prompts[0], "cur_t_in": 0.0495, "cur_t_out": 0.0136}
         info1 = {"tp_t_in": 0.04, "tp_t_out": 0.012, "st_len_out": 22, "t_in": 0.0188, "t_out":0.013, "prompt": prompts[21], "cur_t_in": 0.0188, "cur_t_out": 0.013}
@@ -89,14 +89,14 @@ def warmup_process_requests(engine: LLMEngine,
     request_id = 0
     iter_count = 1
     time_list = []
-    input_len = []
+    input_len = [0]*len(test_prompts)
     output_len = [0]*len(test_prompts)
-    output2_len = [0]*len(test_prompts)
+    # output2_len = [0]*len(test_prompts)
     while test_prompts or engine.has_unfinished_requests():
         time0 = time.perf_counter()
         if test_prompts:
             prompt = test_prompts.pop(0)
-            input_len.append(len(prompt))
+            # input_len.append(len(prompt))
             engine.add_request(str(request_id), prompt, sampling_params)
             request_id += 1
 
@@ -104,25 +104,26 @@ def warmup_process_requests(engine: LLMEngine,
         
         for request_output in request_outputs:
             if request_output.finished:
-                # output_len.append(len(request_output.prompt))
+                output_len.append(len(request_output.prompt))
                 time_list.append(request_output.metrics.finished_time-request_output.metrics.arrival_time)
-                output_len[int(request_output.request_id)] = len(request_output.prompt_token_ids)
-                output2_len[int(request_output.request_id)] = len(request_output.prompt)
+                input_len[int(request_output.request_id)] = len(request_output.prompt_token_ids)
+                output_len[int(request_output.request_id)] = len(request_output.outputs[0].token_ids)
+                # exit()
         time1 = time.perf_counter()
-        # print(time1-time0)
+        print(time1-time0)
 
         iter_count += 1
 
     print("\nnum of requests processed:", len(time_list))
     print("avg time:", sum(time_list)/len(time_list))
     print("block_size = ", engine.cache_config.block_size)
-    # for aa, bb, cc in zip(input_len, output_len, output2_len):
-    #     print(aa, bb, cc)
+    for aa, bb in zip(input_len, output_len):
+        print(aa, bb)
     import csv
     with open("test.csv", "w") as file:
         writer = csv.writer(file)
-        for aa, bb, cc in zip(input_len, output_len, output2_len):
-            writer.writerow([aa,bb,cc])
+        for aa, bb in zip(input_len, output_len):
+            writer.writerow([aa,bb])
 
     return sum(time_list)/len(time_list)
 
@@ -152,8 +153,9 @@ def process_requests(engine: LLMEngine,
     global one_time
     # input_len = []
     output_len = []
+    # print(next_rid, len(requests))
     while next_rid<len(requests) or engine.has_unfinished_requests():
-        # time0 = time.perf_counter()
+        time0 = time.perf_counter()
         cur_time = get_time(zero_time)
         new_reqs, next_rid = get_new_requests(requests, next_rid, cur_time)
         for req in new_reqs:
@@ -165,14 +167,15 @@ def process_requests(engine: LLMEngine,
         request_outputs: List[RequestOutput] = engine.step()
         
         for request_output in request_outputs:
+            # print(len(request_output.prompt_token_ids))
             if request_output.finished:
                 time_list.append(request_output.metrics.finished_time-request_output.metrics.arrival_time)
                 finished_rid = int(request_output.request_id)
                 output_len.append([len(request_output.prompt), requests[finished_rid].workload_type])
                 requests[finished_rid].finish_time = request_output.metrics.finished_time-zero_time
                 requests[finished_rid].latency = requests[finished_rid].finish_time-requests[finished_rid].arrival_time
-                print(request_output.request_id, len(request_output.prompt_token_ids))
-        # time1 = time.perf_counter()
+                # print(request_output.request_id, len(request_output.prompt_token_ids))
+        time1 = time.perf_counter()
         # print(time1-time0)
 
         iter_count += 1
@@ -211,14 +214,17 @@ if __name__ == '__main__':
 
     print("Start generate requests!")
     tmp_prompts = create_test_prompts()
-    test_prompts, workloads_dict = generate_workloads(tmp_prompts, [0,21])
+    test_prompts, workloads_dict = generate_workloads(tmp_prompts, [11, 66])
     requests = generate_requests(workloads_dict)
-    # print_requests(requests[:10])
+    real_requests = requests[:3000]
+    # print_requests(real_requests)
+    print("Num. of Reqs.: ", len(real_requests))
+    # exit()
     print("Start process requests!")
 
     zero_time = init_time()
-    process_requests(engine, requests[:10], workloads_dict)
+    process_requests(engine, real_requests, workloads_dict)
     # warmup_process_requests(engine, [test_prompts[1], test_prompts[1]])
-    print_requests(requests[:10])
+    # print_requests(real_requests)
 
     # todo: output len from len(prompt) to len(tokens)

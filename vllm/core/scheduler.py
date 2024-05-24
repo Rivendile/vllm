@@ -198,6 +198,7 @@ class Scheduler:
                     self.free_seq(seq)
 
     def has_unfinished_seqs(self) -> bool:
+        # print("has unfinished seqs: ", len(self.waiting), len(self.running), len(self.swapped))
         return self.waiting or self.running or self.swapped
 
     def get_num_unfinished_seq_groups(self) -> int:
