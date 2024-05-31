@@ -5,10 +5,11 @@ class Workload:
 
 
 class Request:
-    def __init__(self, rid, arrival_time, workload_type, output_len, slo):
+    def __init__(self, rid, arrival_time, workload_type, input_len, output_len, slo):
         self.rid = rid
         self.arrival_time = arrival_time
         self.workload_type = workload_type
+        self.input_len = input_len
         self.output_len = output_len
         self.finish_time = None
         self.latency = None

@@ -408,6 +408,8 @@ class Scheduler:
             blocks_to_copy=blocks_to_copy,
             ignored_seq_groups=[],
         )
+        print([seq_group.request_id for seq_group in self.running])
+        print(len(self.running), len(self.waiting), len(self.swapped))
         return scheduler_outputs
 
     def schedule(self) -> Tuple[List[SequenceGroupMetadata], SchedulerOutputs]:
@@ -477,6 +479,9 @@ class Scheduler:
         self.block_manager.free(seq)
 
     def free_finished_seq_groups(self) -> None:
+        # for seq_group in self.running:
+        #     if seq_group.is_finished():
+        #         print("free_finished_seq_groups:", seq_group.request_id)
         self.running = deque(seq_group for seq_group in self.running
                              if not seq_group.is_finished())
 
