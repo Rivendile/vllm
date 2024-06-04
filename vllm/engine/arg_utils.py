@@ -1,7 +1,7 @@
 import argparse
 import dataclasses
 from dataclasses import dataclass
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Any
 
 from vllm.config import (CacheConfig, DeviceConfig, LoRAConfig, ModelConfig,
                          ParallelConfig, SchedulerConfig, TokenizerPoolConfig,
@@ -53,6 +53,7 @@ class EngineArgs:
     max_cpu_loras: Optional[int] = None
     device: str = 'auto'
     ray_workers_use_nsight: bool = False
+    strict_stop: bool = False
 
     forced_num_gpu_blocks: Optional[int] = None
 
@@ -382,9 +383,10 @@ class EngineArgs:
     def create_engine_configs(
         self,
     ) -> Tuple[ModelConfig, CacheConfig, ParallelConfig, SchedulerConfig,
-               DeviceConfig, Optional[LoRAConfig],
+               DeviceConfig, bool, Optional[LoRAConfig],
                Optional[VisionLanguageConfig]]:
         device_config = DeviceConfig(self.device)
+        stop_config = self.strict_stop
         model_config = ModelConfig(
             self.model, self.tokenizer, self.tokenizer_mode,
             self.trust_remote_code, self.download_dir, self.load_format,
@@ -441,7 +443,7 @@ class EngineArgs:
             vision_language_config = None
 
         return (model_config, cache_config, parallel_config, scheduler_config,
-                device_config, lora_config, vision_language_config)
+                device_config, stop_config, lora_config, vision_language_config)
 
 
 @dataclass

@@ -192,6 +192,7 @@ class Sequence:
         block_size: int,
         eos_token_id: Optional[int] = None,
         lora_request: Optional[LoRARequest] = None,
+        workload_info: Optional[Dict] = None,
     ) -> None:
         self.seq_id = seq_id
         self.prompt = prompt
@@ -214,6 +215,8 @@ class Sequence:
         self.read_offset = 0
         # Input + output tokens
         self.tokens: Optional[List[str]] = None
+        
+        self.workload_info = workload_info
 
     @property
     def lora_int_id(self) -> int:

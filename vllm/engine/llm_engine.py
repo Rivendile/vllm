@@ -66,6 +66,7 @@ class LLMEngine:
         parallel_config: ParallelConfig,
         scheduler_config: SchedulerConfig,
         device_config: DeviceConfig,
+        stop_config: bool, 
         lora_config: Optional[LoRAConfig],
         vision_language_config: Optional["VisionLanguageConfig"],
         executor_class: Type[ExecutorBase],
@@ -102,6 +103,7 @@ class LLMEngine:
         self.scheduler_config = scheduler_config
         self.device_config = device_config
         self.log_stats = log_stats
+        self.strict_stop = stop_config
         self._verify_args()
 
         self._init_tokenizer()
@@ -321,7 +323,7 @@ class LLMEngine:
         eos_token_id = self.tokenizer.get_lora_tokenizer(
             lora_request).eos_token_id
         seq = Sequence(seq_id, prompt, prompt_token_ids, block_size,
-                       eos_token_id, lora_request)
+                       eos_token_id, lora_request, workload_info=workload_info)
 
         # Defensive copy of SamplingParams, which are used by the sampler,
         # this doesn't deep-copy LogitsProcessor objects
@@ -506,6 +508,7 @@ class LLMEngine:
                                   for seq in existing_finished_seqs]
         new_finished_seqs = [(seq, parent, True) for seq, parent in child_seqs
                              if seq.is_finished()]
+        print([seq.status for seq, parent in child_seqs if seq.is_finished()])
         all_finished_seqs = existing_finished_seqs + new_finished_seqs
         # Sort the finished sequences by their scores.
         all_finished_seqs.sort(key=lambda x: x[0].get_beam_search_score(
@@ -775,41 +778,49 @@ class LLMEngine:
     def _check_stop(self, seq: Sequence,
                     sampling_params: SamplingParams) -> None:
         """Stop the finished sequences."""
-        # Check if the sequence has reached max_model_len.
-        if seq.get_len() > self.scheduler_config.max_model_len:
-            seq.status = SequenceStatus.FINISHED_LENGTH_CAPPED
-            return
+        if not self.strict_stop:
+            # print("Wrong check stop!!!")
+            # Check if the sequence has reached max_model_len.
+            if seq.get_len() > self.scheduler_config.max_model_len:
+                seq.status = SequenceStatus.FINISHED_LENGTH_CAPPED
+                return
 
-        # Check if the sequence has reached max_tokens.
-        if seq.get_output_len() == sampling_params.max_tokens:
-            seq.status = SequenceStatus.FINISHED_LENGTH_CAPPED
-            return
+            # Check if the sequence has reached max_tokens.
+            if seq.get_output_len() == sampling_params.max_tokens:
+                seq.status = SequenceStatus.FINISHED_LENGTH_CAPPED
+                return
 
-        # Check if the minimum number of tokens has been generated yet;
-        # skip the stop string/token checks if not
-        if seq.get_output_len() < sampling_params.min_tokens:
-            return
+            # Check if the minimum number of tokens has been generated yet;
+            # skip the stop string/token checks if not
+            if seq.get_output_len() < sampling_params.min_tokens:
+                return
 
-        for stop_str in sampling_params.stop:
-            if seq.output_text.endswith(stop_str):
+            for stop_str in sampling_params.stop:
+                if seq.output_text.endswith(stop_str):
+                    self._finalize_sequence(seq, sampling_params, stop_str)
+                    seq.status = SequenceStatus.FINISHED_STOPPED
+                    seq.stop_reason = stop_str
+                    return
+            last_token_id = seq.get_last_token_id()
+            if last_token_id in sampling_params.stop_token_ids:
+                stop_str = self.get_tokenizer_for_seq(seq).convert_ids_to_tokens(
+                    last_token_id)
                 self._finalize_sequence(seq, sampling_params, stop_str)
                 seq.status = SequenceStatus.FINISHED_STOPPED
-                seq.stop_reason = stop_str
+                seq.stop_reason = last_token_id
                 return
-        last_token_id = seq.get_last_token_id()
-        if last_token_id in sampling_params.stop_token_ids:
-            stop_str = self.get_tokenizer_for_seq(seq).convert_ids_to_tokens(
-                last_token_id)
-            self._finalize_sequence(seq, sampling_params, stop_str)
-            seq.status = SequenceStatus.FINISHED_STOPPED
-            seq.stop_reason = last_token_id
-            return
 
-        # Check if the sequence has generated the EOS token.
-        if ((not sampling_params.ignore_eos)
-                and seq.get_last_token_id() == seq.eos_token_id):
-            seq.status = SequenceStatus.FINISHED_STOPPED
-            return
+            # Check if the sequence has generated the EOS token.
+            if ((not sampling_params.ignore_eos)
+                    and seq.get_last_token_id() == seq.eos_token_id):
+                seq.status = SequenceStatus.FINISHED_STOPPED
+                return
+        else:
+            # print("Correct check stop~~~")
+            assert seq.workload_info != None
+            if seq.get_output_len()>=seq.workload_info["st_len_out"]:
+                seq.status = SequenceStatus.FINISHED_STOPPED
+                return
 
     def _finalize_sequence(self, seq: Sequence,
                            sampling_params: SamplingParams,

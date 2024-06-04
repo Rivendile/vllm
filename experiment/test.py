@@ -201,6 +201,7 @@ if __name__ == '__main__':
     parser.add_argument("--rate-scale", type=float, default=0.1)
     parser.add_argument("--slo-rate", type=float, default="5")
     parser.add_argument("--output-filename", type=str, default="test_gpus")
+    parser.add_argument("--strict-stop", action='store_true')
     args = parser.parse_args()
     engine = initialize_engine(args)
 

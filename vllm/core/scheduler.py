@@ -481,7 +481,8 @@ class Scheduler:
     def free_finished_seq_groups(self) -> None:
         # for seq_group in self.running:
         #     if seq_group.is_finished():
-        #         print("free_finished_seq_groups:", seq_group.request_id)
+        #         # print("free_finished_seq_groups:", seq_group)
+        #         print("free_finished_seq_groups:", seq_group.request_id, seq_group.seqs_dict)
         self.running = deque(seq_group for seq_group in self.running
                              if not seq_group.is_finished())
 
