@@ -508,7 +508,7 @@ class LLMEngine:
                                   for seq in existing_finished_seqs]
         new_finished_seqs = [(seq, parent, True) for seq, parent in child_seqs
                              if seq.is_finished()]
-        print([seq.status for seq, parent in child_seqs if seq.is_finished()])
+        # print([seq.status for seq, parent in child_seqs if seq.is_finished()])
         all_finished_seqs = existing_finished_seqs + new_finished_seqs
         # Sort the finished sequences by their scores.
         all_finished_seqs.sort(key=lambda x: x[0].get_beam_search_score(

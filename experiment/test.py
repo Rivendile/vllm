@@ -7,6 +7,7 @@ from vllm import LLM
 
 from req_wl import Workload, Request
 from utils import print_requests, get_time, init_time, final_time, cmp, get_metrics, print_metrics
+from simulators import simulate_fcfs, simulate_interleave, simulate_sjmlfq, simulate_sjmlfqmp, simulate_emlfq
 
 path = '/users/zyh/datasets/ShareGPT52K/sg_90k_part1.json'
 max_length = 2048
@@ -57,7 +58,8 @@ def generate_requests(workloads_dict):
             stamp, w_type = x
             w_info = workloads_dict[w_type].info_args
             r_time = w_info["t_in"]+w_info["t_out"]*w_info["st_len_out"]
-            slo = r_time*args.slo_rate
+            # todo: consider slo for testbed
+            slo = r_time*args.slo_rate if not args.simulate else float("inf")
             request = Request(cur_rid, stamp, w_type, 0, w_info["st_len_out"], slo)
             cur_rid += 1
             requests.append(request)
@@ -196,14 +198,17 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(
         description='Demo on using the LLMEngine class directly')
     parser = EngineArgs.add_cli_args(parser)
-    parser.add_argument("--policy", choices=["fcfs", "interleave", "sjmlfq", "emlfq"])
+    # parser.add_argument("--policy", choices=["fcfs", "interleave", "sjmlfq", "emlfq", "sjmlfqmp"])
+    parser.add_argument("--simulate", action="store_true")
     parser.add_argument("--workload-type", choices=["maf1", "maf2"])
     parser.add_argument("--rate-scale", type=float, default=0.1)
     parser.add_argument("--slo-rate", type=float, default="5")
     parser.add_argument("--output-filename", type=str, default="test_gpus")
     parser.add_argument("--strict-stop", action='store_true')
     args = parser.parse_args()
-    engine = initialize_engine(args)
+    # todo: consider slo for testbed exp
+    if not args.simulate:
+        engine = initialize_engine(args)
 
     print("warming up...")
     tmp_prompts = create_test_prompts()
@@ -216,15 +221,27 @@ if __name__ == '__main__':
     tmp_prompts = create_test_prompts()
     test_prompts, workloads_dict = generate_workloads(tmp_prompts, [11, 66])
     requests = generate_requests(workloads_dict)
-    real_requests = requests[:100]
+    real_requests = requests[:1000]
     # print_requests(real_requests)
     print("Num. of Reqs.: ", len(real_requests))
     # exit()
     print("Start process requests!")
 
-    zero_time = init_time()
-    process_requests(engine, real_requests, workloads_dict)
-    # warmup_process_requests(engine, [test_prompts[1], test_prompts[1]])
-    print_requests(real_requests)
-
-    # todo: output len from len(prompt) to len(tokens)
+    if args.simulate:
+        # simulator    
+        if args.scheduler_policy == "fcfs":
+            metrics, max_kv = simulate_fcfs(requests, workloads_dict)
+        elif args.scheduler_policy == "interleave":
+            metrics, max_kv = simulate_interleave(requests, workloads_dict)
+        elif args.scheduler_policy == "sjmlfq":
+            metrics, max_kv = simulate_sjmlfq(requests, workloads_dict)
+        elif args.scheduler_policy == "sjmlfqmp":
+            metrics, max_kv = simulate_sjmlfqmp(requests, workloads_dict)
+        elif args.scheduler_policy == "emlfq":
+            metrics, max_kv = simulate_emlfq(requests, workloads_dict)
+    else:
+        # testbed
+        zero_time = init_time()
+        process_requests(engine, real_requests, workloads_dict)
+        # warmup_process_requests(engine, [test_prompts[1], test_prompts[1]])
+        print_requests(real_requests)

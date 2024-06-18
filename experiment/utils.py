@@ -89,7 +89,7 @@ def get_metrics(args, requests, workloads_dict, workload_duration):
 
     
 def print_metrics(args, workloads_dict, metrics):
-    print("----------\n", args.policy)
+    print("----------\n", args.scheduler_policy)
     for key in list(workloads_dict.keys())+["overall"]:
         if key in metrics:
             val = metrics[key]
@@ -105,7 +105,7 @@ def print_metrics(args, workloads_dict, metrics):
     with open(args.output_filename+".csv", "a") as csvfile:
         writer = csv.writer(csvfile)
 
-        write_content = [args.policy, args.rate_scale]
+        write_content = [args.scheduler_policy, args.rate_scale]
         for metric_str in ["avg_latency", "norm_latency", "p99_latency", "r_tput", "t_tput", "slo_attainment"]:
             for val_str in ["job0", "job1", "overall"]:
                 if val_str in metrics:
