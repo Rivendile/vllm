@@ -7,7 +7,7 @@ import vllm
 from vllm.config import (CacheConfig, DeviceConfig, LoRAConfig, ModelConfig,
                          ParallelConfig, SchedulerConfig, VisionLanguageConfig)
 from vllm.core.scheduler import Scheduler, SchedulerOutputs
-from vllm.engine.arg_utils import EngineArgs
+from vllm.engine.arg_utils import EngineArgs, MultiModelEngineArgs
 from vllm.engine.metrics import StatLogger, Stats
 from vllm.engine.ray_utils import initialize_ray_cluster
 from vllm.executor.executor_base import ExecutorBase
@@ -844,3 +844,179 @@ class LLMEngine:
 
     def check_health(self) -> None:
         self.model_executor.check_health()
+
+class MultiLLMEngine(LLMEngine):
+    """
+    Modify class LLMEngine for multi-model serving
+    """
+
+    def __init__(
+        self,
+        model_configs: List[ModelConfig],
+        cache_config: CacheConfig,
+        parallel_config: ParallelConfig,
+        scheduler_config: SchedulerConfig,
+        device_config: DeviceConfig,
+        stop_config: bool, 
+        lora_config: Optional[LoRAConfig],
+        vision_language_config: Optional["VisionLanguageConfig"],
+        executor_class: Type[ExecutorBase],
+        log_stats: bool,
+        usage_context: UsageContext = UsageContext.ENGINE_CONTEXT,
+    ) -> None:
+        for model_config in model_configs:
+            logger.info(
+                f"Initializing an LLM engine (v{vllm.__version__}) with config: "
+                f"model={model_config.model!r}, "
+                f"tokenizer={model_config.tokenizer!r}, "
+                f"tokenizer_mode={model_config.tokenizer_mode}, "
+                f"revision={model_config.revision}, "
+                f"tokenizer_revision={model_config.tokenizer_revision}, "
+                f"trust_remote_code={model_config.trust_remote_code}, "
+                f"dtype={model_config.dtype}, "
+                f"max_seq_len={model_config.max_model_len}, "
+                f"download_dir={model_config.download_dir!r}, "
+                f"load_format={model_config.load_format}, "
+                f"tensor_parallel_size={parallel_config.tensor_parallel_size}, "
+                f"disable_custom_all_reduce="
+                f"{parallel_config.disable_custom_all_reduce}, "
+                f"quantization={model_config.quantization}, "
+                f"enforce_eager={model_config.enforce_eager}, "
+                f"kv_cache_dtype={cache_config.cache_dtype}, "
+                f"device_config={device_config.device}, "
+                f"seed={model_config.seed})")
+        # TODO(woosuk): Print more configs in debug mode.
+
+        self.model_configs = model_configs
+        self.cache_config = cache_config
+        self.lora_config = lora_config
+        self.vision_language_config = vision_language_config
+        self.parallel_config = parallel_config
+        self.scheduler_config = scheduler_config
+        self.device_config = device_config
+        self.log_stats = log_stats
+        self.strict_stop = stop_config
+        self._verify_args()
+
+        self._init_tokenizer()
+        self.detokenizers = []
+        for tokenizer in self.tokenizers:
+            self.detokenizers.append(Detokenizer(tokenizer))
+        self.seq_counter = Counter()
+
+        self.model_executor = []
+        for model_config in model_configs:
+            self.model_executor.append(executor_class(model_config, cache_config,
+                                             parallel_config, scheduler_config,
+                                             device_config, lora_config,
+                                             vision_language_config))
+
+        # If usage stat is enabled, collect relevant info.
+        if is_usage_stats_enabled():
+            usage_message.report_usage(
+                get_architecture_class_name(model_config),
+                usage_context,
+                extra_kvs={
+                    # Common configuration
+                    "dtype":
+                    str(model_config.dtype),
+                    "tensor_parallel_size":
+                    parallel_config.tensor_parallel_size,
+                    "block_size":
+                    cache_config.block_size,
+                    "gpu_memory_utilization":
+                    cache_config.gpu_memory_utilization,
+
+                    # Quantization
+                    "quantization":
+                    model_config.quantization,
+                    "kv_cache_dtype":
+                    cache_config.cache_dtype,
+
+                    # Feature flags
+                    "enable_lora":
+                    bool(lora_config),
+                    "enable_prefix_caching":
+                    cache_config.enable_prefix_caching,
+                    "enforce_eager":
+                    model_config.enforce_eager,
+                    "disable_custom_all_reduce":
+                    parallel_config.disable_custom_all_reduce,
+                })
+
+        # Ping the tokenizer to ensure liveness if it runs in a
+        # different process.
+        for tokenizer in self.tokenizers:
+            tokenizer.ping()
+
+        # Create the scheduler.
+        # NOTE: the cache_config here have been updated with the numbers of
+        # GPU and CPU blocks, which are profiled in the distributed executor.
+        self.scheduler = Scheduler(scheduler_config, cache_config, lora_config)
+
+        # Metric Logging.
+        if self.log_stats:
+            self.stat_logger = StatLogger(
+                local_interval=_LOCAL_LOGGING_INTERVAL_SEC,
+                labels=dict(model_name0=model_configs[0].model, model_name1=model_configs[1].model))
+            self.stat_logger.info("cache_config", self.cache_config)
+
+    @classmethod
+    def from_engine_args(
+        cls,
+        engine_args: MultiModelEngineArgs,
+        usage_context: UsageContext = UsageContext.ENGINE_CONTEXT,
+    ) -> "LLMEngine":
+        """Creates an LLM engine from the engine arguments."""
+        # Create the engine configs.
+        engine_configs = engine_args.create_engine_configs()
+        parallel_config = engine_configs[2]
+        device_config = engine_configs[4]
+
+        # Initialize the cluster and specify the executor class.
+        if device_config.device_type == "neuron":
+            from vllm.executor.neuron_executor import NeuronExecutor
+            executor_class = NeuronExecutor
+        elif parallel_config.worker_use_ray:
+            initialize_ray_cluster(parallel_config)
+            from vllm.executor.ray_gpu_executor import RayGPUExecutor
+            executor_class = RayGPUExecutor
+        else:
+            assert parallel_config.world_size == 1, (
+                "Ray is required if parallel_config.world_size > 1.")
+            from vllm.executor.gpu_executor import GPUExecutor
+            executor_class = GPUExecutor
+
+        # Create the LLM engine.
+        engine = cls(
+            *engine_configs,
+            executor_class=executor_class,
+            log_stats=not engine_args.disable_log_stats,
+            usage_context=usage_context,
+        )
+        return engine
+
+    def _verify_args(self) -> None:
+        for model_config in self.model_configs:
+            model_config.verify_with_parallel_config(self.parallel_config)
+        self.cache_config.verify_with_parallel_config(self.parallel_config)
+        if self.lora_config:
+            for model_config in self.model_configs:
+                self.lora_config.verify_with_model_config(model_config)
+            self.lora_config.verify_with_scheduler_config(
+                self.scheduler_config)
+
+    def _init_tokenizer(self, **tokenizer_init_kwargs):
+        self.tokenizers: BaseTokenizerGroup = []
+        for model_config in self.model_configs:
+            init_kwargs = dict(
+                tokenizer_id=model_config.tokenizer,
+                enable_lora=bool(self.lora_config),
+                max_num_seqs=self.scheduler_config.max_num_seqs,
+                max_input_length=None,
+                tokenizer_mode=model_config.tokenizer_mode,
+                trust_remote_code=model_config.trust_remote_code,
+                revision=model_config.tokenizer_revision)
+            init_kwargs.update(tokenizer_init_kwargs)
+            self.tokenizer.append(get_tokenizer_group(
+                self.parallel_config.tokenizer_pool_config, **init_kwargs))

@@ -1,6 +1,6 @@
 """vLLM: a high-throughput and memory-efficient inference engine for LLMs"""
 
-from vllm.engine.arg_utils import AsyncEngineArgs, EngineArgs
+from vllm.engine.arg_utils import AsyncEngineArgs, EngineArgs, MultiModelEngineArgs
 from vllm.engine.async_llm_engine import AsyncLLMEngine
 from vllm.engine.llm_engine import LLMEngine
 from vllm.engine.ray_utils import initialize_ray_cluster
@@ -17,6 +17,7 @@ __all__ = [
     "CompletionOutput",
     "LLMEngine",
     "EngineArgs",
+    "MultiModelEngineArgs",
     "AsyncLLMEngine",
     "AsyncEngineArgs",
     "initialize_ray_cluster",

@@ -2,7 +2,7 @@ import time, sys, os, json, argparse
 from typing import List, Tuple
 from tqdm import tqdm
 
-from vllm import EngineArgs, LLMEngine, SamplingParams, RequestOutput
+from vllm import EngineArgs, LLMEngine, SamplingParams, RequestOutput, MultiModelEngineArgs
 from vllm import LLM
 
 from req_wl import Workload, Request
@@ -194,12 +194,19 @@ def initialize_engine(args: argparse.Namespace) -> LLMEngine:
     return LLMEngine.from_engine_args(engine_args)
 
 
+def initialize_multimodel_engine(args: argparse.Namespace) -> LLMEngine:
+    """Initialize the LLMEngine from the command line arguments."""
+    engine_args = MultiModelEngineArgs.from_cli_args(args)
+    return LLMEngine.from_engine_args(engine_args)
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
         description='Demo on using the LLMEngine class directly')
     parser = EngineArgs.add_cli_args(parser)
     # parser.add_argument("--policy", choices=["fcfs", "interleave", "sjmlfq", "emlfq", "sjmlfqmp"])
     parser.add_argument("--simulate", action="store_true")
+    parser.add_argument("--same-model", action="store_false")
     parser.add_argument("--workload-type", choices=["maf1", "maf2"])
     parser.add_argument("--rate-scale", type=float, default=0.1)
     parser.add_argument("--slo-rate", type=float, default="5")
@@ -207,41 +214,82 @@ if __name__ == '__main__':
     parser.add_argument("--strict-stop", action='store_true')
     args = parser.parse_args()
     # todo: consider slo for testbed exp
-    if not args.simulate:
-        engine = initialize_engine(args)
+    if args.same_model:
+        if not args.simulate:
+            engine = initialize_engine(args)
 
-    print("warming up...")
-    tmp_prompts = create_test_prompts()
-    # warmup_process_requests(engine, tmp_prompts)
-    print("warming up done.")
-    one_time = -1
-    # exit()
+        # Todo multi-model
+        print("warming up...")
+        tmp_prompts = create_test_prompts()
+        # warmup_process_requests(engine, tmp_prompts)
+        print("warming up done.")
+        one_time = -1
+        # exit()
 
-    print("Start generate requests!")
-    tmp_prompts = create_test_prompts()
-    test_prompts, workloads_dict = generate_workloads(tmp_prompts, [11, 66])
-    requests = generate_requests(workloads_dict)
-    real_requests = requests[:1000]
-    # print_requests(real_requests)
-    print("Num. of Reqs.: ", len(real_requests))
-    # exit()
-    print("Start process requests!")
+        print("Start generate requests!")
+        tmp_prompts = create_test_prompts()
+        test_prompts, workloads_dict = generate_workloads(tmp_prompts, [11, 66])
+        requests = generate_requests(workloads_dict)
+        real_requests = requests[:100]
+        # print_requests(real_requests)
+        print("Num. of Reqs.: ", len(real_requests))
+        # exit()
+        print("Start process requests!")
 
-    if args.simulate:
-        # simulator    
-        if args.scheduler_policy == "fcfs":
-            metrics, max_kv = simulate_fcfs(requests, workloads_dict)
-        elif args.scheduler_policy == "interleave":
-            metrics, max_kv = simulate_interleave(requests, workloads_dict)
-        elif args.scheduler_policy == "sjmlfq":
-            metrics, max_kv = simulate_sjmlfq(requests, workloads_dict)
-        elif args.scheduler_policy == "sjmlfqmp":
-            metrics, max_kv = simulate_sjmlfqmp(requests, workloads_dict)
-        elif args.scheduler_policy == "emlfq":
-            metrics, max_kv = simulate_emlfq(requests, workloads_dict)
+        if args.simulate:
+            # simulator    
+            if args.scheduler_policy == "fcfs":
+                metrics, max_kv = simulate_fcfs(requests, workloads_dict)
+            elif args.scheduler_policy == "interleave":
+                metrics, max_kv = simulate_interleave(requests, workloads_dict)
+            elif args.scheduler_policy == "sjmlfq":
+                metrics, max_kv = simulate_sjmlfq(requests, workloads_dict)
+            elif args.scheduler_policy == "sjmlfqmp":
+                metrics, max_kv = simulate_sjmlfqmp(requests, workloads_dict)
+            elif args.scheduler_policy == "emlfq":
+                metrics, max_kv = simulate_emlfq(requests, workloads_dict)
+        else:
+            # testbed
+            zero_time = init_time()
+            process_requests(engine, real_requests, workloads_dict)
+            # warmup_process_requests(engine, [test_prompts[1], test_prompts[1]])
+            print_requests(real_requests)
     else:
-        # testbed
-        zero_time = init_time()
-        process_requests(engine, real_requests, workloads_dict)
-        # warmup_process_requests(engine, [test_prompts[1], test_prompts[1]])
-        print_requests(real_requests)
+        if not args.simulate:
+            engine = initialize_multimodel_engine(args)
+
+        print("warming up...")
+        tmp_prompts = create_test_prompts()
+        # warmup_process_requests(engine, tmp_prompts)
+        print("warming up done.")
+        one_time = -1
+        # exit()
+
+        print("Start generate requests!")
+        tmp_prompts = create_test_prompts()
+        test_prompts, workloads_dict = generate_workloads(tmp_prompts, [11, 66])
+        requests = generate_requests(workloads_dict)
+        real_requests = requests[:100]
+        # print_requests(real_requests)
+        print("Num. of Reqs.: ", len(real_requests))
+        # exit()
+        print("Start process requests!")
+
+        if args.simulate:
+            # simulator    
+            if args.scheduler_policy == "fcfs":
+                metrics, max_kv = simulate_fcfs(requests, workloads_dict)
+            elif args.scheduler_policy == "interleave":
+                metrics, max_kv = simulate_interleave(requests, workloads_dict)
+            elif args.scheduler_policy == "sjmlfq":
+                metrics, max_kv = simulate_sjmlfq(requests, workloads_dict)
+            elif args.scheduler_policy == "sjmlfqmp":
+                metrics, max_kv = simulate_sjmlfqmp(requests, workloads_dict)
+            elif args.scheduler_policy == "emlfq":
+                metrics, max_kv = simulate_emlfq(requests, workloads_dict)
+        else:
+            # testbed
+            zero_time = init_time()
+            process_requests(engine, real_requests, workloads_dict)
+            # warmup_process_requests(engine, [test_prompts[1], test_prompts[1]])
+            print_requests(real_requests)

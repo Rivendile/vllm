@@ -447,6 +447,152 @@ class EngineArgs:
 
 
 @dataclass
+class MultiModelEngineArgs(EngineArgs):
+    """Arguments for multi model engine."""
+    model1: str
+    trust_remote_code1: bool = False
+    revision1: Optional[str] = None
+    code_revision1: Optional[str] = None
+    tokenizer_revision1: Optional[str] = None
+    enforce_eager1: bool = False
+    tokenizer1: Optional[str] = None
+    tokenizer_mode1: str = 'auto'
+    download_dir1: Optional[str] = None
+    load_format1: str = 'auto'
+    dtype1: str = 'auto'
+    seed1: int = 0
+    max_model_len1: Optional[int] = None
+    quantization1: Optional[str] = None
+    max_context_len_to_capture1: int = 8192
+    max_logprobs1: int = 5  # OpenAI default value
+    @staticmethod
+    def add_cli_args(
+            parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
+        parser = EngineArgs.add_cli_args(parser)
+        parser.add_argument(
+            '--model1',
+            type=str,
+            default='facebook/opt-125m',
+            help='name or path of the huggingface model to use')
+        parser.add_argument(
+            '--tokenizer1',
+            type=str,
+            default=MultiModelEngineArgs.tokenizer1,
+            help='name or path of the huggingface tokenizer to use')        
+        parser.add_argument('--trust-remote-code1',
+                            action='store_true',
+                            help='trust remote code from huggingface')
+        parser.add_argument('--download-dir1',
+                            type=str,
+                            default=MultiModelEngineArgs.download_dir1,
+                            help='directory to download and load the weights, '
+                            'default to the default cache dir of '
+                            'huggingface')
+        parser.add_argument(
+            '--load-format1',
+            type=str,
+            default=MultiModelEngineArgs.load_format1,
+            choices=['auto', 'pt', 'safetensors', 'npcache', 'dummy'],
+            help='The format of the model weights to load. '
+            '"auto" will try to load the weights in the safetensors format '
+            'and fall back to the pytorch bin format if safetensors format '
+            'is not available. '
+            '"pt" will load the weights in the pytorch bin format. '
+            '"safetensors" will load the weights in the safetensors format. '
+            '"npcache" will load the weights in pytorch format and store '
+            'a numpy cache to speed up the loading. '
+            '"dummy" will initialize the weights with random values, '
+            'which is mainly for profiling.')
+        parser.add_argument(
+            '--dtype',
+            type=str,
+            default=MultiModelEngineArgs.dtype1,
+            choices=[
+                'auto', 'half', 'float16', 'bfloat16', 'float', 'float32'
+            ],
+            help='data type for model weights and activations. '
+            'The "auto" option will use FP16 precision '
+            'for FP32 and FP16 models, and BF16 precision '
+            'for BF16 models.')
+        parser.add_argument(
+            '--revision1',
+            type=str,
+            default=None,
+            help='the specific model version to use. It can be a branch '
+            'name, a tag name, or a commit id. If unspecified, will use '
+            'the default version.')
+        parser.add_argument(
+            '--code-revision1',
+            type=str,
+            default=None,
+            help='the specific revision to use for the model code on '
+            'Hugging Face Hub. It can be a branch name, a tag name, or a '
+            'commit id. If unspecified, will use the default version.')
+        parser.add_argument(
+            '--tokenizer-revision1',
+            type=str,
+            default=None,
+            help='the specific tokenizer version to use. It can be a branch '
+            'name, a tag name, or a commit id. If unspecified, will use '
+            'the default version.')
+        parser.add_argument('--max-model-len1',
+                            type=int,
+                            default=MultiModelEngineArgs.max_model_len1,
+                            help='model context length. If unspecified, '
+                            'will be automatically derived from the model.')
+        parser.add_argument('--quantization1',
+                            '-q',
+                            type=str,
+                            choices=['awq', 'gptq', 'squeezellm', None],
+                            default=MultiModelEngineArgs.quantization1,
+                            help='Method used to quantize the weights. If '
+                            'None, we first check the `quantization_config` '
+                            'attribute in the model config file. If that is '
+                            'None, we assume the model weights are not '
+                            'quantized and use `dtype` to determine the data '
+                            'type of the weights.')
+        parser.add_argument('--enforce-eager1',
+                            action='store_true',
+                            help='Always use eager-mode PyTorch. If False, '
+                            'will use eager mode and CUDA graph in hybrid '
+                            'for maximal performance and flexibility.')
+        parser.add_argument('--max-context-len-to-capture1',
+                            type=int,
+                            default=MultiModelEngineArgs.max_context_len_to_capture1,
+                            help='maximum context length covered by CUDA '
+                            'graphs. When a sequence has context length '
+                            'larger than this, we fall back to eager mode.')
+        parser.add_argument(
+            '--max-logprobs1',
+            type=int,
+            default=MultiModelEngineArgs.max_logprobs,
+            help=('max number of log probs to return logprobs is specified in'
+                  ' SamplingParams'))
+        return parser
+    
+    @classmethod
+    def from_cli_args(cls, args: argparse.Namespace) -> 'MultiModelEngineArgs':
+        # Get the list of attributes of this dataclass.
+        attrs = [attr.name for attr in dataclasses.fields(cls)]
+        # Set the attributes from the parsed arguments.
+        engine_args = cls(**{attr: getattr(args, attr) for attr in attrs})
+        return engine_args
+
+    def create_engine_configs(self):
+        model_config, cache_config, parallel_config, scheduler_config, device_config, stop_config, lora_config, vision_language_config = EngineArgs.create_engine_configs()
+        model_config1 = ModelConfig(
+            self.model1, self.tokenizer1, self.tokenizer_mode1,
+            self.trust_remote_code1, self.download_dir1, self.load_format1,
+            self.dtype1, self.seed1, self.revision1, self.code_revision1,
+            self.tokenizer_revision1, self.max_model_len1, self.quantization1,
+            self.enforce_eager1, self.max_context_len_to_capture1,
+            self.max_logprobs1)
+        
+        return ([model_config, model_config1], cache_config, parallel_config, scheduler_config,
+                device_config, stop_config, lora_config, vision_language_config)
+
+
+@dataclass
 class AsyncEngineArgs(EngineArgs):
     """Arguments for asynchronous vLLM engine."""
     engine_use_ray: bool = False
