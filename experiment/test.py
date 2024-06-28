@@ -9,7 +9,7 @@ from req_wl import Workload, Request
 from utils import print_requests, get_time, init_time, final_time, cmp, get_metrics, print_metrics
 from simulators import simulate_fcfs, simulate_interleave, simulate_sjmlfq, simulate_sjmlfqmp, simulate_emlfq
 
-path = '/users/zyh/datasets/ShareGPT52K/sg_90k_part1.json'
+path = '/users/ll/datasets/ShareGPT52K/sg_90k_part1.json'
 max_length = 2048
 max_test_num = 500
 sampling_params = SamplingParams(max_tokens=512)
@@ -221,7 +221,7 @@ if __name__ == '__main__':
     tmp_prompts = create_test_prompts()
     test_prompts, workloads_dict = generate_workloads(tmp_prompts, [11, 66])
     requests = generate_requests(workloads_dict)
-    real_requests = requests[:1000]
+    real_requests = requests[:10]
     # print_requests(real_requests)
     print("Num. of Reqs.: ", len(real_requests))
     # exit()
