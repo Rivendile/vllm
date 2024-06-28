@@ -1,5 +1,7 @@
 import time
 import csv
+from typing import List, Tuple, Dict
+from req_wl import Workload, Request
 
 def print_requests(requests):
     print(f"{len(requests)} in all:")
@@ -25,25 +27,30 @@ def cmp(x,y):
     else:
         return 0
     
-def get_metrics(args, requests, workloads_dict, workload_duration):
-    latencys = {}
-    tokens = {}
-    duration = {}
-    counts = {}
-    norm_latencys = {}
+def get_metrics(
+        args, 
+        requests: List[Request], 
+        workloads_dict: Dict[str, Workload], 
+        workload_duration: float
+    ) -> Dict[str, Dict[str, float]]:
+    latencies = {}  # latencies of different workload_types
+    tokens = {}     # output length of different workload_types
+    duration = {}   # duration of different workload_types
+    norm_latencies = {} 
+    counts = {}     # Counts of different work types, including requests that are not finished
     for key in workloads_dict.keys():
         duration[key] = workload_duration
     for r in requests:
         if r.finish_time != None :
-            if r.workload_type not in latencys:
-                latencys[r.workload_type] = []
+            if r.workload_type not in latencies:
+                latencies[r.workload_type] = []
                 tokens[r.workload_type] = []
                 duration[r.workload_type] = 0
-                norm_latencys[r.workload_type] = []
-            latencys[r.workload_type].append(r.latency)
+                norm_latencies[r.workload_type] = []
+            latencies[r.workload_type].append(r.latency)
             w_info = workloads_dict[r.workload_type].info_args
             rtime = w_info["t_in"]+w_info["t_out"]*w_info["st_len_out"]
-            norm_latencys[r.workload_type].append(r.latency/rtime)
+            norm_latencies[r.workload_type].append(r.latency/rtime)
             tokens[r.workload_type].append(r.output_len)
             duration[r.workload_type] = max(duration[r.workload_type], r.finish_time)
         if r.workload_type not in counts:
@@ -56,18 +63,18 @@ def get_metrics(args, requests, workloads_dict, workload_duration):
     all_duration = workload_duration
     all_tokens = []
     all_counts = len(requests)
-    for key, val in latencys.items():
+    for key, val in latencies.items():
         val.sort()
         metrics[key]={}
         metrics[key]["avg_latency"] = sum(val)/len(val)
-        metrics[key]['norm_latency'] = sum(norm_latencys[key])/len(norm_latencys[key])
+        metrics[key]['norm_latency'] = sum(norm_latencies[key])/len(norm_latencies[key])
         metrics[key]["p99_latency"] = val[int(len(val)*0.99)]
-        metrics[key]["r_tput"] = len(val)/duration[key] if duration[key]>0 else 0
-        metrics[key]["t_tput"] = sum(tokens[key])/duration[key] if duration[key]>0 else 0
+        metrics[key]["request_tput"] = len(val)/duration[key] if duration[key]>0 else 0
+        metrics[key]["token_tput"] = sum(tokens[key])/duration[key] if duration[key]>0 else 0
         metrics[key]["slo_attainment"] = len(val)/counts[key]
 
         all_latency.extend(val)
-        all_norm_latency.extend(norm_latencys[key])
+        all_norm_latency.extend(norm_latencies[key])
         all_duration = max(all_duration, duration[key])
         all_tokens.extend(tokens[key])
         # all_counts += counts[key]
@@ -76,27 +83,30 @@ def get_metrics(args, requests, workloads_dict, workload_duration):
     metrics["overall"]["avg_latency"] = sum(all_latency)/len(all_latency) if len(all_latency)>0 else 0
     metrics["overall"]["norm_latency"] = sum(all_norm_latency)/len(all_norm_latency) if len(all_norm_latency)>0 else 0
     metrics["overall"]["p99_latency"] = all_latency[int(len(val)*0.99)] if len(all_latency)>0 else 0
-    metrics["overall"]["r_tput"] = len(all_latency)/all_duration
-    metrics["overall"]["t_tput"] = sum(all_tokens)/all_duration
+    metrics["overall"]["request_tput"] = len(all_latency)/all_duration
+    metrics["overall"]["token_tput"] = sum(all_tokens)/all_duration
     metrics["overall"]["slo_attainment"] = len(all_latency)/all_counts if all_counts>0 else 0
 
-    # print(latencys)
+    # print(latencies)
     # print(all_latency)
     # print(all_norm_latency)
-    # print(norm_latencys)
+    # print(norm_latencies)
     
     return metrics
 
     
 def print_metrics(args, workloads_dict, metrics):
+    # print(metrics)
+    # print("\n\n\n\n")
     print("----------\n", args.scheduler_policy)
     for key in list(workloads_dict.keys())+["overall"]:
         if key in metrics:
             val = metrics[key]
             if key!="overall":
                 print(key, workloads_dict[key].info_args)
-            print(f"{key}: avg latency: {val['avg_latency']}, p99 latency: {val['p99_latency']}, request tput: {val['r_tput']}, token tput: {val['t_tput']}, slo attainment: {val['slo_attainment']}")
+            print(f"{key}: avg latency: {val['avg_latency']}, p99 latency: {val['p99_latency']}, request tput: {val['request_tput']}, token tput: {val['token_tput']}, slo attainment: {val['slo_attainment']}")
         else:
+            print(f"{key}: no such requests")
             print(key, workloads_dict[key].info_args)
             print(f"{key}: avg latency: 0, p99 latency: 0, request tput: 0, token tput: 0, slo attainment: 0")
 
@@ -106,7 +116,7 @@ def print_metrics(args, workloads_dict, metrics):
         writer = csv.writer(csvfile)
 
         write_content = [args.scheduler_policy, args.rate_scale]
-        for metric_str in ["avg_latency", "norm_latency", "p99_latency", "r_tput", "t_tput", "slo_attainment"]:
+        for metric_str in ["avg_latency", "norm_latency", "p99_latency", "request_tput", "token_tput", "slo_attainment"]:
             for val_str in ["job0", "job1", "overall"]:
                 if val_str in metrics:
                     val = metrics[val_str][metric_str]

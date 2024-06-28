@@ -1,5 +1,5 @@
 import time, sys, os, json, argparse
-from typing import List, Tuple
+from typing import List, Tuple, Dict
 from tqdm import tqdm
 
 from vllm import EngineArgs, LLMEngine, SamplingParams, RequestOutput
@@ -15,10 +15,12 @@ max_test_num = 500
 sampling_params = SamplingParams(max_tokens=512)
 
 
-def generate_workloads(prompts, prompt_ids):
-    # print(len(prompts[0]), len(prompts[21]))
+def generate_workloads(
+        prompts: List[str], 
+        prompt_ids: List[int]
+    ) -> Tuple[List[str], Dict[str, Workload]]: 
     if prompt_ids == [11, 66]:
-        #todo: tp need to profile
+        # TODO: tp need to profile
         info0 = {"tp_t_in": 0.17, "tp_t_out": 0.0123, "st_len_out": 512, "t_in": 0.028, "t_out":0.0135, "prompt": prompts[11], "cur_t_in": 0.028, "cur_t_out": 0.0135}
         info1 = {"tp_t_in": 0.4, "tp_t_out": 0.012, "st_len_out": 26, "t_in": 0.263, "t_out":0.0135, "prompt": prompts[66], "cur_t_in": 0.263, "cur_t_out": 0.0135}
         workload0 = Workload("job0", info0)
@@ -32,7 +34,7 @@ def generate_workloads(prompts, prompt_ids):
     else:
         raise NotImplementedError
 
-def generate_requests(workloads_dict):
+def generate_requests(workloads_dict: Dict[str, Workload]) -> List[Request]:
     if args.workload_type == "maf1":
         from alpa_serve.trace import Trace
 
@@ -43,7 +45,9 @@ def generate_requests(workloads_dict):
         rate_scale = args.rate_scale
         num_models = 2
         model_names = [f"job{i}" for i in range(num_models)]
-        train_replays = azure_v1_trace.replay(model_names, model_mapping_strategy="round_robin", arrival_distribution="gamma", start_time=train_start, end_time=train_end, interval_seconds=60, rate_scale_factor=rate_scale, cv_scale_factor=1)
+        train_replays = azure_v1_trace.replay(model_names, model_mapping_strategy="round_robin", 
+            arrival_distribution="gamma", start_time=train_start, end_time=train_end, 
+            interval_seconds=60, rate_scale_factor=rate_scale, cv_scale_factor=1)
 
         # for x in train_replays.arrivals:
         arrival_time = []
@@ -66,7 +70,7 @@ def generate_requests(workloads_dict):
 
         return requests
 
-
+# return questions from human in sharegpt dataset. 
 def create_test_prompts() -> List[str]:
     prompts = []
     count = 0
@@ -85,7 +89,7 @@ def create_test_prompts() -> List[str]:
 
 # add one time and step one time.
 def warmup_process_requests(engine: LLMEngine,
-                     test_prompts: List[str]):
+                     test_prompts: List[str]) -> None:
     """Continuously process a list of prompts and handle the outputs."""
 
     request_id = 0
@@ -141,9 +145,11 @@ def get_new_requests(requests, next_rid, cur_time):
     return return_req, next_rid
 
 # add according to arrival time and step one time.
-def process_requests(engine: LLMEngine,
-                    requests: List[Request],
-                    workloads_dict):
+def process_requests(
+        engine: LLMEngine,
+        requests: List[Request],
+        workloads_dict: Dict[str, Workload]
+    ) -> None:
     """Continuously process a list of prompts and handle the outputs."""
 
     request_id = 0
@@ -151,11 +157,12 @@ def process_requests(engine: LLMEngine,
     time_list = []
     requests.sort(key=lambda x: x.arrival_time)
     next_rid = 0
-    global zero_time
+    zero_time = init_time()
+    # global zero_time
     global one_time
     # print(next_rid, len(requests))
     while next_rid<len(requests) or engine.has_unfinished_requests():
-        time0 = time.perf_counter()
+        # time0 = time.perf_counter()
         cur_time = get_time(zero_time)
         new_reqs, next_rid = get_new_requests(requests, next_rid, cur_time)
         for req in new_reqs:
@@ -241,7 +248,9 @@ if __name__ == '__main__':
             metrics, max_kv = simulate_emlfq(requests, workloads_dict)
     else:
         # testbed
-        zero_time = init_time()
+        # zero_time = init_time()
+        for request in real_requests:
+            print(request)
         process_requests(engine, real_requests, workloads_dict)
         # warmup_process_requests(engine, [test_prompts[1], test_prompts[1]])
         print_requests(real_requests)
