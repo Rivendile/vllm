@@ -1,7 +1,20 @@
+from typing import Dict
+
 class Workload:
-    def __init__(self, workload_type, info_args):
+    def __init__(
+            self, 
+            workload_type: str, 
+            info_args: Dict[str, float]
+        ) -> None:
         self.workload_type = workload_type
         self.info_args = info_args
+
+    def __repr__(self) -> str:
+        args_str = ', '.join(f"{key}={value}" for key, value in self.info_args.items() if key != "prompt")
+        return f"Workload(workload_type={self.workload_type}, info_args={args_str})"
+    
+    def __str__(self) -> str:
+        return repr(self)
 
 
 class Request:

@@ -3,6 +3,18 @@ import csv
 from typing import List, Tuple, Dict
 from req_wl import Workload, Request
 
+def read_info_from_csv(
+        csv_file: str
+    ) -> List[Tuple[str, Dict[str, float]]]:
+    with open(csv_file, newline='') as csvfile:
+        reader = csv.DictReader(csvfile)
+        infos = []
+        for row in reader:
+            for key in row.keys():
+                row[key] = float(row[key])
+            infos.append(row)
+    return infos
+
 def print_requests(requests):
     print(f"{len(requests)} in all:")
     for req in requests:
@@ -96,8 +108,8 @@ def get_metrics(
 
     
 def print_metrics(args, workloads_dict, metrics):
-    # print(metrics)
-    # print("\n\n\n\n")
+    print(metrics)
+    print("\n\n\n\n")
     print("----------\n", args.scheduler_policy)
     for key in list(workloads_dict.keys())+["overall"]:
         if key in metrics:
@@ -107,8 +119,6 @@ def print_metrics(args, workloads_dict, metrics):
             print(f"{key}: avg latency: {val['avg_latency']}, p99 latency: {val['p99_latency']}, request tput: {val['request_tput']}, token tput: {val['token_tput']}, slo attainment: {val['slo_attainment']}")
         else:
             print(f"{key}: no such requests")
-            print(key, workloads_dict[key].info_args)
-            print(f"{key}: avg latency: 0, p99 latency: 0, request tput: 0, token tput: 0, slo attainment: 0")
 
     # print(f"Max kv used: {max_kv}")
 
@@ -124,3 +134,5 @@ def print_metrics(args, workloads_dict, metrics):
                     val = 0
                 write_content.append(val)
         writer.writerow(write_content)
+
+

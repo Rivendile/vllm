@@ -6,7 +6,8 @@ from vllm import EngineArgs, LLMEngine, SamplingParams, RequestOutput
 from vllm import LLM
 
 from req_wl import Workload, Request
-from utils import print_requests, get_time, init_time, final_time, cmp, get_metrics, print_metrics
+from utils import read_info_from_csv, print_requests, get_time, \
+            init_time, final_time, cmp, get_metrics, print_metrics
 from simulators import simulate_fcfs, simulate_interleave, simulate_sjmlfq, simulate_sjmlfqmp, simulate_emlfq
 
 path = '/users/ll/datasets/ShareGPT52K/sg_90k_part1.json'
@@ -19,6 +20,27 @@ def generate_workloads(
         prompts: List[str], 
         prompt_ids: List[int]
     ) -> Tuple[List[str], Dict[str, Workload]]: 
+    # assume profiling data is stored in order in file info.csv
+    assert prompt_ids == [11, 66], "Only support this case now!"
+    workload_types = len(prompt_ids)
+    infos = read_info_from_csv("infos.csv")
+    assert len(infos) == workload_types, \
+        "length of info.csv does not match prompt_ids"
+    test_prompts, workloads_dict = [], {}
+
+    for num in range(workload_types):
+        workload_type = "job" + str(num)
+        info = infos[num]
+        assert prompt_ids[num] == infos[num]["prompt_id"], \
+            f"prompt_id {prompt_ids[num]} != infos prompt_id {infos[num]['prompt_id']}"
+        info["prompt"] = prompts[num]
+        workload = Workload(workload_type, info)
+        workloads_dict[workload_type] = workload
+        test_prompts.append(prompts[num])
+
+    print(test_prompts, workloads_dict)
+    return test_prompts, workloads_dict
+
     if prompt_ids == [11, 66]:
         # TODO: tp need to profile
         info0 = {"tp_t_in": 0.17, "tp_t_out": 0.0123, "st_len_out": 512, "t_in": 0.028, "t_out":0.0135, "prompt": prompts[11], "cur_t_in": 0.028, "cur_t_out": 0.0135}
@@ -30,6 +52,8 @@ def generate_workloads(
         test_prompts = []
         for prompt_id in prompt_ids:
             test_prompts.append(prompts[prompt_id])
+        print(workloads_dict)
+        exit(0)
         return test_prompts, workloads_dict
     else:
         raise NotImplementedError
@@ -210,19 +234,12 @@ if __name__ == '__main__':
     parser.add_argument("--workload-type", choices=["maf1", "maf2"])
     parser.add_argument("--rate-scale", type=float, default=0.1)
     parser.add_argument("--slo-rate", type=float, default="5")
-    parser.add_argument("--output-filename", type=str, default="test_gpus")
+    parser.add_argument("--output-filename", type=str, default="result")
     parser.add_argument("--strict-stop", action='store_true')
     args = parser.parse_args()
     # todo: consider slo for testbed exp
-    if not args.simulate:
-        engine = initialize_engine(args)
-
-    print("warming up...")
-    tmp_prompts = create_test_prompts()
-    # warmup_process_requests(engine, tmp_prompts)
-    print("warming up done.")
+   
     one_time = -1
-    # exit()
 
     print("Start generate requests!")
     tmp_prompts = create_test_prompts()
@@ -249,8 +266,7 @@ if __name__ == '__main__':
     else:
         # testbed
         # zero_time = init_time()
-        for request in real_requests:
-            print(request)
+        engine = initialize_engine(args)
         process_requests(engine, real_requests, workloads_dict)
         # warmup_process_requests(engine, [test_prompts[1], test_prompts[1]])
         print_requests(real_requests)
