@@ -1,5 +1,4 @@
-import time
-import csv
+import csv, time
 from typing import List, Tuple, Dict
 from req_wl import Workload, Request
 
@@ -108,19 +107,19 @@ def get_metrics(
 
     
 def print_metrics(args, workloads_dict, metrics):
-    print(metrics)
-    print("\n\n\n\n")
-    print("----------\n", args.scheduler_policy)
+    print("----------scheduler_policy: ", args.scheduler_policy, "-----------\n")
     for key in list(workloads_dict.keys())+["overall"]:
         if key in metrics:
             val = metrics[key]
-            if key!="overall":
-                print(key, workloads_dict[key].info_args)
-            print(f"{key}: avg latency: {val['avg_latency']}, p99 latency: {val['p99_latency']}, request tput: {val['request_tput']}, token tput: {val['token_tput']}, slo attainment: {val['slo_attainment']}")
+            if key != "overall":
+                print(key, workloads_dict[key])
+            else: 
+                print("key: overall\n")
+            print(f"{key}: avg latency: {val['avg_latency']}, p99 latency: {val['p99_latency']}, "
+                "request tput: {val['request_tput']}, token tput: {val['token_tput']}, "
+                "slo attainment: {val['slo_attainment']}")
         else:
             print(f"{key}: no such requests")
-
-    # print(f"Max kv used: {max_kv}")
 
     with open(args.output_filename+".csv", "a") as csvfile:
         writer = csv.writer(csvfile)

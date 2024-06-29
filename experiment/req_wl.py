@@ -32,12 +32,12 @@ class Request:
         self.prio_quan = None
         self.last_exec_time = arrival_time
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return (f"Request(rid={self.rid}, arrival_time={self.arrival_time}, workload_type={self.workload_type}, "
         f"input_len={self.input_len}, output_len={self.output_len}, finish_time={self.finish_time}, "
         f"latency={self.latency}, slo={self.slo}, cur_token={self.cur_token}, "
         f"priority={self.priority}, prio_quan={self.prio_quan}, last_exec_time={self.last_exec_time})")
     
-    def __str__(self):
+    def __str__(self) -> str:
         return repr(self)
 

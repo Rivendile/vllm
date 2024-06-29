@@ -3,16 +3,17 @@ from typing import List, Tuple, Dict
 from tqdm import tqdm
 
 from vllm import EngineArgs, LLMEngine, SamplingParams, RequestOutput
-from vllm import LLM
 
 from req_wl import Workload, Request
 from utils import read_info_from_csv, print_requests, get_time, \
             init_time, final_time, cmp, get_metrics, print_metrics
-from simulators import simulate_fcfs, simulate_interleave, simulate_sjmlfq, simulate_sjmlfqmp, simulate_emlfq
+from simulators import simulate_fcfs, simulate_interleave, simulate_sjmlfq, \
+            simulate_sjmlfqmp, simulate_emlfq
 
 path = '/users/ll/datasets/ShareGPT52K/sg_90k_part1.json'
 max_length = 2048
-max_test_num = 500
+requests_num = 50
+magic_prompts_id = [11, 66]
 sampling_params = SamplingParams(max_tokens=512)
 
 
@@ -21,7 +22,7 @@ def generate_workloads(
         prompt_ids: List[int]
     ) -> Tuple[List[str], Dict[str, Workload]]: 
     # assume profiling data is stored in order in file info.csv
-    assert prompt_ids == [11, 66], "Only support this case now!"
+    assert prompt_ids == magic_prompts_id, "Only support this case now!"
     workload_types = len(prompt_ids)
     infos = read_info_from_csv("infos.csv")
     assert len(infos) == workload_types, \
@@ -31,32 +32,12 @@ def generate_workloads(
     for num in range(workload_types):
         workload_type = "job" + str(num)
         info = infos[num]
-        assert prompt_ids[num] == infos[num]["prompt_id"], \
-            f"prompt_id {prompt_ids[num]} != infos prompt_id {infos[num]['prompt_id']}"
         info["prompt"] = prompts[num]
         workload = Workload(workload_type, info)
         workloads_dict[workload_type] = workload
         test_prompts.append(prompts[num])
 
-    print(test_prompts, workloads_dict)
     return test_prompts, workloads_dict
-
-    if prompt_ids == [11, 66]:
-        # TODO: tp need to profile
-        info0 = {"tp_t_in": 0.17, "tp_t_out": 0.0123, "st_len_out": 512, "t_in": 0.028, "t_out":0.0135, "prompt": prompts[11], "cur_t_in": 0.028, "cur_t_out": 0.0135}
-        info1 = {"tp_t_in": 0.4, "tp_t_out": 0.012, "st_len_out": 26, "t_in": 0.263, "t_out":0.0135, "prompt": prompts[66], "cur_t_in": 0.263, "cur_t_out": 0.0135}
-        workload0 = Workload("job0", info0)
-        workload1 = Workload("job1", info1)
-        workloads_dict = {"job0":workload0, "job1":workload1}
-
-        test_prompts = []
-        for prompt_id in prompt_ids:
-            test_prompts.append(prompts[prompt_id])
-        print(workloads_dict)
-        exit(0)
-        return test_prompts, workloads_dict
-    else:
-        raise NotImplementedError
 
 def generate_requests(workloads_dict: Dict[str, Workload]) -> List[Request]:
     if args.workload_type == "maf1":
@@ -97,7 +78,6 @@ def generate_requests(workloads_dict: Dict[str, Workload]) -> List[Request]:
 # return questions from human in sharegpt dataset. 
 def create_test_prompts() -> List[str]:
     prompts = []
-    count = 0
     with open(path, 'r', encoding='utf-8') as file:
         data = json.load(file)
 
@@ -106,9 +86,8 @@ def create_test_prompts() -> List[str]:
             if topic['from'] == 'human':
                 if len(topic['value']) < max_length and len(topic['value']) != 0:
                     prompts.append(topic['value'])
-                    count += 1
-                    if count >= max_test_num:
-                        return prompts
+
+    return prompts
 
 
 # add one time and step one time.
@@ -242,17 +221,13 @@ if __name__ == '__main__':
     one_time = -1
 
     print("Start generate requests!")
-    tmp_prompts = create_test_prompts()
-    test_prompts, workloads_dict = generate_workloads(tmp_prompts, [11, 66])
+    all_prompts = create_test_prompts()
+    test_prompts, workloads_dict = generate_workloads(all_prompts, magic_prompts_id)
     requests = generate_requests(workloads_dict)
-    real_requests = requests[:10]
-    # print_requests(real_requests)
-    print("Num. of Reqs.: ", len(real_requests))
-    # exit()
-    print("Start process requests!")
+    real_requests = requests[:requests_num]
+    print("End generating requests\nStart process requests!")
 
-    if args.simulate:
-        # simulator    
+    if args.simulate: # simulator    
         if args.scheduler_policy == "fcfs":
             metrics, max_kv = simulate_fcfs(requests, workloads_dict)
         elif args.scheduler_policy == "interleave":
