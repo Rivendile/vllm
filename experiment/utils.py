@@ -14,6 +14,20 @@ def read_info_from_csv(
             infos.append(row)
     return infos
 
+def get_cur_info(
+        tensor_parallel_size: int,
+        info_args: Dict[str, float]
+    ) -> None:
+    if tensor_parallel_size == 1:
+        info_args["cur_t_in"] = info_args["t_in"]
+        info_args["cur_t_out"] = info_args["t_out"]
+    elif tensor_parallel_size == 2:
+        info_args["cur_t_in"] = info_args["tp_t_in"]
+        info_args["cur_t_out"] = info_args["tp_t_out"]
+    else:
+        assert False, "Only support tensor_parallel_size = 1 or 2."
+
+
 def print_requests(requests):
     print(f"{len(requests)} in all:")
     for req in requests:

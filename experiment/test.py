@@ -5,7 +5,7 @@ from tqdm import tqdm
 from vllm import EngineArgs, LLMEngine, SamplingParams, RequestOutput
 
 from req_wl import Workload, Request
-from utils import read_info_from_csv, print_requests, get_time, \
+from utils import read_info_from_csv, get_cur_info, print_requests, get_time, \
             init_time, final_time, cmp, get_metrics, print_metrics
 from simulators import simulate_fcfs, simulate_interleave, simulate_sjmlfq, \
             simulate_sjmlfqmp, simulate_emlfq
@@ -18,6 +18,7 @@ sampling_params = SamplingParams(max_tokens=512)
 
 
 def generate_workloads(
+        args: argparse.Namespace, 
         prompts: List[str], 
         prompt_ids: List[int]
     ) -> Tuple[List[str], Dict[str, Workload]]: 
@@ -31,12 +32,15 @@ def generate_workloads(
 
     for num in range(workload_types):
         workload_type = "job" + str(num)
-        info = infos[num]
-        info["prompt"] = prompts[num]
-        workload = Workload(workload_type, info)
+        # add prompt to workload info
+        infos[num]["prompt"] = prompts[num]
+        # add profiling data to workload info
+        get_cur_info(args.tensor_parallel_size, infos[num])
+        # create workload
+        workload = Workload(workload_type, infos[num])
+        # add the type of workload to workloads_dict
         workloads_dict[workload_type] = workload
         test_prompts.append(prompts[num])
-
     return test_prompts, workloads_dict
 
 def generate_requests(workloads_dict: Dict[str, Workload]) -> List[Request]:
@@ -222,7 +226,7 @@ if __name__ == '__main__':
 
     print("Start generate requests!")
     all_prompts = create_test_prompts()
-    test_prompts, workloads_dict = generate_workloads(all_prompts, magic_prompts_id)
+    test_prompts, workloads_dict = generate_workloads(args, all_prompts, magic_prompts_id)
     requests = generate_requests(workloads_dict)
     real_requests = requests[:requests_num]
     print("End generating requests\nStart process requests!")

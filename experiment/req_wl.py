@@ -1,5 +1,18 @@
 from typing import Dict
 
+"""
+parameters in info_args in class Workload:
+"tp_t_in"       : prefill time when tp = 2
+"tp_t_out"      : time to decode a token when tp = 2  
+"st_len_out"    : length of output token
+"t_in"          : prefill time when tp = 1
+"t_out"         : time to decode a token when tp = 1
+"prompt_id"     : id of prompt
+"cur_t_in"      : current prefill time (depending on args)
+"cur_t_out"     : current time to decode a token (depending on args)
+"""
+
+
 class Workload:
     def __init__(
             self, 
