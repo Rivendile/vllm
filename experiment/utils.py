@@ -93,7 +93,7 @@ def get_metrics(
     metrics["overall"] = {}
     metrics["overall"]["avg_latency"] = sum(all_latency)/len(all_latency) if len(all_latency)>0 else 0
     metrics["overall"]["norm_latency"] = sum(all_norm_latency)/len(all_norm_latency) if len(all_norm_latency)>0 else 0
-    metrics["overall"]["p99_latency"] = all_latency[int(len(val)*0.99)] if len(all_latency)>0 else 0
+    metrics["overall"]["p99_latency"] = all_latency[int(len(all_latency)*0.99)] if len(all_latency)>0 else 0
     metrics["overall"]["request_tput"] = len(all_latency)/all_duration
     metrics["overall"]["token_tput"] = sum(all_tokens)/all_duration
     metrics["overall"]["slo_attainment"] = len(all_latency)/all_counts if all_counts>0 else 0
